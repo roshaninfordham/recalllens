@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/client";
 import { blobToDataUrl, createDetector } from "@/lib/detector-client";
+import { PhoneCamera } from "@/components/PhoneCamera";
 import { SAMPLING, frameDiff, shouldAnalyze } from "@/lib/sampling";
 import type { BBox, Detection, Proposal, TrackedDetection, Zone } from "@/lib/types";
 import { DEFAULT_ZONES } from "@/lib/zones";
@@ -23,6 +24,7 @@ export interface CameraStatus {
   detector?: string;
 }
 
+const PHONE = "__phone__";
 const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
 const boxStyle = (b: BBox) => ({ left: pct(b.x), top: pct(b.y), width: pct(b.width), height: pct(b.height) });
 
@@ -77,7 +79,7 @@ export function LiveCamera({
 
   // ---- open the selected camera ----
   useEffect(() => {
-    if (!deviceId) return;
+    if (!deviceId || deviceId === PHONE) return; // the phone stream arrives via <PhoneCamera>
     let stream: MediaStream | undefined;
     let cancelled = false;
     navigator.mediaDevices
@@ -142,9 +144,7 @@ export function LiveCamera({
           try {
             const r = await detector.detect(await createImageBitmap(v), SAMPLING.maxDim, SAMPLING.jpegQuality);
             found = r.proposals;
-            setProposals(found);
-            setTracked([]);
-            setBackground([]);
+            setProposals(found); // previous named boxes stay until the new result replaces them
             image = await blobToDataUrl(r.jpeg);
             update({ detector: `EfficientDet · ${Math.round(r.ms)}ms` });
           } catch {
@@ -203,12 +203,13 @@ export function LiveCamera({
       <div className="flex flex-wrap items-center gap-2">
         <Select value={deviceId} onValueChange={(v) => setDeviceId(v ?? "")}>
           <SelectTrigger className="h-10 w-64" aria-label="Camera source">
-            <SelectValue placeholder="Choose camera">{(v: string) => devices.find((d) => d.deviceId === v)?.label || (v ? "Camera" : "Choose camera")}</SelectValue>
+            <SelectValue placeholder="Choose camera">{(v: string) => v === PHONE ? "📱 Phone camera" : devices.find((d) => d.deviceId === v)?.label || (v ? "Camera" : "Choose camera")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {devices.map((d, i) => (
               <SelectItem key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${i + 1}`}</SelectItem>
             ))}
+            <SelectItem value={PHONE}>📱 Phone camera (scan a QR code)</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2">
@@ -219,6 +220,20 @@ export function LiveCamera({
           {editZone ? "Done editing zones" : "Edit zones"}
         </Button>
       </div>
+
+      {deviceId === PHONE && (
+        <PhoneCamera
+          onStream={(stream) => {
+            if (videoRef.current) videoRef.current.srcObject = stream;
+            update({ state: "live", label: "Phone camera", resolution: "phone", cameraFps: 8, visionError: undefined });
+          }}
+          onClose={() => {
+            api("/api/phone/pair", { method: "DELETE" }).catch(() => {});
+            if (videoRef.current) videoRef.current.srcObject = null;
+            setDeviceId(devices.find((d) => !/iphone|desk view/i.test(d.label))?.deviceId ?? devices[0]?.deviceId ?? "");
+          }}
+        />
+      )}
 
       {editZone && (
         <div role="group" aria-label="Zone to draw" className="flex flex-wrap gap-2 text-sm">
@@ -257,7 +272,7 @@ export function LiveCamera({
         ))}
 
         {/* detector boxes, shown instantly while the vision model names them */}
-        {proposals.map((p) => (
+        {tracked.length === 0 && proposals.map((p) => (
           <div key={`p${p.mark}`} style={boxStyle(p.bbox)} className="absolute rounded-md border-2 border-sky-300/90">
             <span className={`absolute left-0 whitespace-nowrap rounded bg-sky-600/90 px-1.5 py-0.5 text-xs font-medium text-white ${p.bbox.y < 0.08 ? "top-full mt-1" : "-top-1 -translate-y-full"}`}>
               {p.label} · identifying…
@@ -290,7 +305,7 @@ export function LiveCamera({
               {analyzing && status.detector && <Badge variant="secondary">{status.detector}</Badge>}
             </>
           ) : (
-            <Badge variant="secondary">{STATE_TEXT[status.state]}</Badge>
+            <Badge variant="secondary">{deviceId === PHONE && status.state === "starting" ? "Waiting for your phone…" : STATE_TEXT[status.state]}</Badge>
           )}
         </div>
       </div>

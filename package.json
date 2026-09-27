@@ -14,7 +14,8 @@
     "eval:vision": "node --env-file=.env.local --import tsx scripts/eval-vision.mts",
     "eval:detector": "node --env-file=.env.local --import tsx scripts/eval-detector.mts",
     "predev": "./scripts/setup-models.sh >/dev/null",
-    "pree2e": "./scripts/setup-models.sh >/dev/null"
+    "pree2e": "./scripts/setup-models.sh >/dev/null",
+    "e2e:phone": "node --import tsx scripts/e2e-phone.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -23,6 +24,7 @@
     "cn": "^0.4.0",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
+    "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "shadcn": "^4.21.0",
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.19.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
