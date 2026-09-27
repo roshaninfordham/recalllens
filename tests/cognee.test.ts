@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { observationText, parseObservation } from "../lib/cognee";
+import { observationText, parseObservation, parseObservations } from "../lib/cognee";
 import type { MemoryEvent } from "../lib/types";
 
 const ev: MemoryEvent = {
@@ -34,4 +34,16 @@ test("ignores chunks that are not observations (e.g. self-improvement summaries)
 test("redacts secrets before they reach memory", () => {
   const t = observationText({ ...ev, damage_description: "label reads password=hunter2" });
   assert.ok(!t.includes("hunter2"));
+});
+
+test("a merged session chunk with many observations yields every one of them", () => {
+  // Verbatim shape from Cognee 1.5.4 after several session writes merged into one document.
+  const chunk = "Session ID: recalllens-x\n\nQuestion: \n\nAnswer: " + [
+    observationText({ ...ev, type: "FIRST_SEEN", object_id: "wicker-basket-2", label: "wicker basket", state: "normal" }),
+    observationText({ ...ev, type: "FIRST_SEEN", object_id: "charger-1", label: "white USB-C charger", state: "normal" }),
+    observationText(ev),
+  ].join("\n\nQuestion: \n\nAnswer: ");
+  const all = parseObservations(chunk, "doc-1");
+  assert.deepEqual(all.map((o) => [o.object_id, o.state]), [["wicker-basket-2", "normal"], ["charger-1", "normal"], ["charger-1", "damaged"]]);
+  assert.ok(all.every((o) => o.data_id === "doc-1"));
 });

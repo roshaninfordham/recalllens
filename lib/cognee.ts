@@ -82,7 +82,7 @@ function fields(text: string): Record<string, string> {
   return out;
 }
 
-/** Parses one chunk back into a structured observation; null if it isn't one of ours. */
+/** Parses one observation's text back into structure; null if it isn't one of ours. */
 export function parseObservation(text: string, data_id?: string): RecalledObservation | null {
   const f = fields(text);
   const { "Object ID": object_id, Timestamp: timestamp, "Location zone": zone } = f;
@@ -100,6 +100,14 @@ export function parseObservation(text: string, data_id?: string): RecalledObserv
     source: f.Source ?? "unknown",
     data_id,
   };
+}
+
+/** A chunk can hold many observations (Cognee merges a session's writes into one document), so split first. */
+export function parseObservations(text: string, data_id?: string): RecalledObservation[] {
+  return text
+    .split(/(?=Observation:)/)
+    .map((part) => parseObservation(part, data_id))
+    .filter((o): o is RecalledObservation => o !== null);
 }
 
 export async function rememberObservation(e: MemoryEvent, sessionId: string) {
@@ -136,9 +144,8 @@ export async function recallObject(query: string, category?: string): Promise<Re
   }
   const seen = new Set<string>();
   return (Array.isArray(items) ? items : [])
-    .map((i) => (i.text ? parseObservation(i.text, i.metadata?.data_id) : null))
-    .filter((o): o is RecalledObservation => {
-      if (!o) return false;
+    .flatMap((i) => (i.text ? parseObservations(i.text, i.metadata?.data_id) : []))
+    .filter((o) => {
       const key = `${o.object_id}|${o.timestamp}|${o.event}`; // session merge can duplicate a chunk
       if (seen.has(key)) return false;
       seen.add(key);
