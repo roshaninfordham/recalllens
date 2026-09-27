@@ -1,5 +1,6 @@
 import { publish } from "./bus";
-import { forgetObservation, recallObject, rememberObservation, type RecalledObservation } from "./cognee";
+import { forgetObservation, recallObject, rememberObservation } from "./cognee";
+import { band, latestTrustworthy } from "./confidence";
 import { addCart, getCart, getPhoneModel, getZones, recentEvents } from "./db";
 import { demoCatalog } from "./commerce";
 import { pipe } from "./pipeline";
@@ -9,13 +10,6 @@ import { zoneName } from "./zones";
 // The Memory Concierge's tools. Exposed at /api/tools/<name> (for ClawMax/OpenClaw skills via curl)
 // and called in-process by the local agent runtime. Each call is published so the UI shows real execution.
 
-export type Band = "strong" | "moderate" | "uncertain";
-export const band = (c: number): Band => (c >= 0.9 ? "strong" : c >= 0.7 ? "moderate" : "uncertain");
-
-/** Picks the newest observation that is trustworthy (≥0.7); falls back to newest if none is. */
-export function latestTrustworthy(obs: RecalledObservation[]): RecalledObservation | undefined {
-  return obs.find((o) => o.confidence >= 0.7) ?? obs[0];
-}
 
 interface Tool {
   description: string;
