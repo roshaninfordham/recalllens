@@ -85,9 +85,11 @@ Health: `GET /api/health` → `{ cognee, clawmax, agent, vision, commerce, detai
 Default zones are four quadrants (Desk, Couch, Hall / Front Table, Hall / Back Table). Click **Edit zones**, choose a zone, drag a rectangle over the part of the view it represents. Zones are drawn onto the frames sent to vision, so the model and the zone map agree.
 
 ### Connect ClawMax
-1. Import `clawmax/AGENTS/memory-concierge`, `clawmax/SKILLS/custom/*` and `clawmax/WORKFLOWS/remember-and-assist` into your ClawMax workspace.
-2. Set `CLAWMAX_BASE_URL` (and `CLAWMAX_DASHBOARD_TOKEN`) in `.env.local`, restart.
-3. The ClawMax agent must run on the same machine as RecallLens: the skills call `http://127.0.0.1:3000/api/tools/*`, which only accepts loopback requests.
+Works with a **ClawMax running on this Mac** (open-source ClawMax, `./SYSTEM/start.sh`, API on `:3001`):
+1. Copy `clawmax/AGENTS/memory-concierge`, `clawmax/SKILLS/custom/*` and `clawmax/WORKFLOWS/remember-and-assist` into the ClawMax workspace.
+2. Set `CLAWMAX_BASE_URL=http://127.0.0.1:3001` (and `CLAWMAX_DASHBOARD_TOKEN` from `SYSTEM/dashboard/.dashboard-token`) in `.env.local`, restart.
+
+**Hosted clawmax.ai is not wired yet.** Its agents run in the cloud and cannot reach RecallLens's tool API, which deliberately accepts loopback requests only. Supporting it needs a tunnel plus a per-deployment token, to be designed once the hosted workspace's API is available.
 
 ## Demo script (≈5 min)
 
@@ -95,7 +97,7 @@ Default zones are four quadrants (Desk, Couch, Hall / Front Table, Hall / Back T
 2. Accept consent (policy v1.0, participant id, three acknowledgements).
 3. Put the charger on the back table. Overlay: *USB-C Charger · 94% · Hall / Back Table · NORMAL*. Memory card appears; timeline shows *In Cognee*.
 4. Walk away. Wait ~30 s (Cognee indexing). Press **🎤 Speak**: "Where is my charger?" → agent calls *Recall object history from Cognee* → answers with place and time.
-5. Pick up the charger, show the damage (frayed cable / cracked housing must be *visible*). Overlay turns red, **DAMAGED**; one proactive notice.
+5. Swap in the damaged charger (frayed cable / cracked housing must be *visible*) and set it back on the back table, so memory records the damage in the same zone rather than a move. Overlay turns red, **DAMAGED**; one proactive notice.
 6. Switch language to हिन्दी / Hinglish: "Mera charger toot gaya hai, mere phone ke liye naya charger dhoondo." → *Identify phone compatibility → Search products → Add to cart* → cart shows the 20W USB-C charger, **not purchased**.
 7. Close: "RecallLens remembers what you forget, and acts when you need help."
 
