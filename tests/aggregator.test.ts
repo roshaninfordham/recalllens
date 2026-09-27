@@ -20,6 +20,8 @@ test("zones resolve from bbox centre", () => {
 test("labels collapse to categories", () => {
   assert.equal(categoryOf("USB-C phone charger"), "charger");
   assert.equal(categoryOf("house keys"), "keys");
+  assert.equal(categoryOf("white USB-C cable"), "charger");
+  assert.equal(categoryOf("white USB-C adapter box"), "charger");
 });
 
 test("20 stable sightings produce exactly one FIRST_SEEN", () => {

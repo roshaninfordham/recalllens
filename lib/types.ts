@@ -17,6 +17,8 @@ export interface Detection {
   damage_description?: string;
   /** "detector": precise box from the in-browser detector; "vision": approximate box from the vision model. */
   box_source?: "detector" | "vision";
+  /** false = background contents of the room: shown on screen, never remembered. */
+  personal?: boolean;
 }
 
 /** A detection after tracking: stable id + zone assigned from the bbox. */

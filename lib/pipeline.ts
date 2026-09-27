@@ -32,7 +32,9 @@ export function describe(e: MemoryEvent): string {
 export function ingest(detections: Detection[], source: MemoryEvent["source"], consentId: string) {
   pipe.consentId = consentId;
   const now = new Date();
-  const { tracked, events } = pipe.agg.ingest(detections, getZones(), now, source);
+  // Only personal items become memory; background contents are returned for display only.
+  const background = detections.filter((d) => d.personal === false);
+  const { tracked, events } = pipe.agg.ingest(detections.filter((d) => d.personal !== false), getZones(), now, source);
   pipe.current = tracked;
   pipe.lastFrameAt = now.toISOString();
 
@@ -55,8 +57,8 @@ export function ingest(detections: Detection[], source: MemoryEvent["source"], c
         publish({ kind: "log", level: "error", title: "COGNEE REMEMBER FAILED", detail: err.message, data: { id, cognee_status: "failed" } });
       });
 
-    // One concise proactive notice per damaged object.
-    if (e.type === "STATE_CHANGED" && e.state === "damaged" && !pipe.notified.has(e.object_id)) {
+    // One concise proactive notice per damaged object, whether it turned damaged or was first seen that way.
+    if (e.state === "damaged" && !pipe.notified.has(e.object_id)) {
       pipe.notified.add(e.object_id);
       publish({
         kind: "agent", level: "warn", title: "PROACTIVE",
@@ -64,5 +66,5 @@ export function ingest(detections: Detection[], source: MemoryEvent["source"], c
       });
     }
   }
-  return { tracked, events };
+  return { tracked, events, background };
 }

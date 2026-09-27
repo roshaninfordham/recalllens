@@ -32,10 +32,11 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["mark", "label", "confidence", "box", "state", "state_confidence", "damage_description"],
+        required: ["mark", "label", "personal_item", "confidence", "box", "state", "state_confidence", "damage_description"],
         properties: {
           mark: { type: "integer" },
           label: { type: "string" },
+          personal_item: { type: "boolean" },
           confidence: { type: "number" },
           box: {
             type: "object", additionalProperties: false, required: ["x", "y", "width", "height"],
@@ -64,6 +65,7 @@ ${marks}
 
 For each object:
 - label: name the object itself (the container, not what is in it: "bowl of peas", not "peas"), as specifically as you are confident, 1-4 words (e.g. "white USB-C charger", "black ceramic mug", "TV remote", "house keys").
+- personal_item: true for a distinct portable belonging someone may later need to find or ask about (phone, charger, cable, keys, wallet, glasses, earbuds, bottle, mug, notebook, remote, bag, tool, and anything held in a hand); false for the room's background contents (books on a shelf, decor, baskets, stacks of magazines, items on display).
 - confidence 0-1 that it really is that object.
 - box: {x, y, width, height} normalized 0-1, x,y = top-left. Tight: edges touch the object's visible extremes.
 - state: "damaged" if ANY physical damage is visible (connector separated or pulled away from its cable, exposed or frayed wires, split insulation, cracked or broken housing or screen, bent prongs, burn marks, torn or shattered parts); "normal" if it looks intact; "uncertain" if you can't tell. Inspect cables and connectors closely.
@@ -119,11 +121,12 @@ export function parseDetections(raw: string, proposals: Proposal[] = []): Detect
       state_confidence: clamp(d.state_confidence),
       damage_description: typeof d.damage_description === "string" && d.damage_description ? d.damage_description.slice(0, 140) : undefined,
       box_source: proposal ? "detector" : "vision",
+      personal: d.personal_item !== false,
     });
   }
   for (const p of proposals) {
     if (used.has(p.mark) || p.score < KEEP_UNNAMED) continue;
-    out.push({ label: p.label, confidence: p.score, bbox: p.bbox, state: "uncertain", state_confidence: 0, box_source: "detector" });
+    out.push({ label: p.label, confidence: p.score, bbox: p.bbox, state: "uncertain", state_confidence: 0, box_source: "detector", personal: true });
   }
   return out;
 }

@@ -33,7 +33,7 @@ const DURABLE_STATES: ObjectState[] = ["normal", "damaged"];
 /** Collapses free-form vision labels into a trackable category. */
 export function categoryOf(label: string): string {
   const l = label.toLowerCase();
-  if (/charger|charging|power adapter|power brick/.test(l)) return "charger";
+  if (/charger|charging|adapter|power brick|cable|cord/.test(l)) return "charger";
   if (/\bkeys?\b|keychain/.test(l)) return "keys";
   if (/wallet/.test(l)) return "wallet";
   if (/glasses|spectacles|sunglasses/.test(l)) return "glasses";
@@ -57,11 +57,6 @@ export class ObservationAggregator {
 
   snapshot(): Track[] {
     return [...this.tracks.values()];
-  }
-
-  reset() {
-    this.tracks.clear();
-    this.counters.clear();
   }
 
   ingest(

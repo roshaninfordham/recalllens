@@ -2,6 +2,7 @@ import { requireConsent } from "@/lib/guard";
 import { clearEvents, recentEvents } from "@/lib/db";
 import { forgetDataset } from "@/lib/cognee";
 import { pipe } from "@/lib/pipeline";
+import { ObservationAggregator } from "@/lib/aggregator";
 import { clearHistories } from "@/lib/agent";
 import { clearRecent, publish } from "@/lib/bus";
 
@@ -20,7 +21,7 @@ export async function DELETE(req: Request) {
     cognee = (e as Error).message;
   }
   clearEvents();
-  pipe.agg.reset();
+  pipe.agg = new ObservationAggregator(); // fresh instance also picks up code changes during development
   pipe.notified.clear();
   pipe.current = [];
   clearRecent();

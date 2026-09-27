@@ -44,3 +44,11 @@ test("browser proposals are validated and capped", () => {
   assert.equal(sanitizeProposals(Array.from({ length: 50 }, (_, i) => ({ mark: i + 1, label: "cup", score: 0.5, bbox: { x: 0, y: 0, width: 0.1, height: 0.1 } }))).length, 20);
   assert.deepEqual(sanitizeProposals("nope"), []);
 });
+
+test("background contents are flagged so they are shown but never remembered", () => {
+  const out = parseDetections(JSON.stringify({ objects: [
+    obj({ mark: 0, label: "stack of magazines", personal_item: false, box: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 } }),
+    obj({ mark: 0, label: "house keys", personal_item: true, box: { x: 0.5, y: 0.5, width: 0.1, height: 0.1 } }),
+  ] }));
+  assert.deepEqual(out.map((d) => [d.label, d.personal]), [["stack of magazines", false], ["house keys", true]]);
+});
