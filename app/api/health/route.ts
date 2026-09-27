@@ -13,9 +13,11 @@ async function clawmaxHealth() {
       headers: process.env.CLAWMAX_DASHBOARD_TOKEN ? { Authorization: `Bearer ${process.env.CLAWMAX_DASHBOARD_TOKEN}` } : {},
       signal: AbortSignal.timeout(5000),
     });
-    return { ok: r.ok, agent: r.ok, mode, detail: r.ok ? "connected" : `HTTP ${r.status}` };
+    const local = Boolean(process.env.OPENAI_API_KEY || process.env.AGENT_API_KEY);
+    return { ok: r.ok, agent: r.ok || local, mode: r.ok ? mode : local ? "local" : mode, detail: r.ok ? "connected" : `HTTP ${r.status}${r.status === 401 ? " (credential rejected)" : ""}${local ? " · agent falls back to local runtime" : ""}` };
   } catch (e) {
-    return { ok: false, agent: false, mode, detail: (e as Error).message };
+    const local = Boolean(process.env.OPENAI_API_KEY || process.env.AGENT_API_KEY);
+    return { ok: false, agent: local, mode: local ? "local" : mode, detail: (e as Error).message };
   }
 }
 

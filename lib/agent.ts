@@ -32,9 +32,24 @@ export async function askAgent(message: string, sessionId: string, lang: string)
   const t0 = Date.now();
   publish({ kind: "agent", title: "USER", detail: message, data: { lang } });
   if (mode === "none") throw new Error("No agent runtime configured (set CLAWMAX_BASE_URL or OPENAI_API_KEY)");
-  const reply = mode === "clawmax" ? await viaClawMax(message, sessionId, lang) : await viaLocal(message, sessionId, lang);
-  publish({ kind: "agent", level: "ok", title: "AGENT", detail: reply, data: { mode, ms: Date.now() - t0 } });
-  return { reply, mode, ms: Date.now() - t0 };
+  let used: AgentMode = mode;
+  let reply: string;
+  if (mode === "clawmax") {
+    try {
+      reply = await viaClawMax(message, sessionId, lang);
+    } catch (e) {
+      // Degrade honestly: say ClawMax failed and that the local runtime answered instead.
+      const canLocal = Boolean(process.env.OPENAI_API_KEY || process.env.AGENT_API_KEY);
+      publish({ kind: "agent", level: "warn", title: "CLAWMAX UNAVAILABLE", detail: `${(e as Error).message.slice(0, 120)}${canLocal ? " · answering with the local runtime" : ""}` });
+      if (!canLocal) throw e;
+      used = "local";
+      reply = await viaLocal(message, sessionId, lang);
+    }
+  } else {
+    reply = await viaLocal(message, sessionId, lang);
+  }
+  publish({ kind: "agent", level: "ok", title: "AGENT", detail: reply, data: { mode: used, ms: Date.now() - t0 } });
+  return { reply, mode: used, ms: Date.now() - t0 };
 }
 
 async function viaClawMax(message: string, sessionId: string, lang: string): Promise<string> {

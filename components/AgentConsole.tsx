@@ -163,6 +163,7 @@ function AgentLine({ m }: { m: BusMessage }) {
     return <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground"><span aria-hidden>⟳</span>{TOOL_TEXT[data?.tool ?? ""] ?? data?.tool}<code className="truncate text-xs">{m.detail}</code></div>;
   if (m.title === "TOOL RESULT")
     return <div className="flex items-center gap-2 px-1 text-sm font-medium text-emerald-700"><span aria-hidden>✓</span>{TOOL_TEXT[data?.tool ?? ""] ?? data?.tool}<span className="text-xs font-normal text-muted-foreground">{m.detail?.split(" ").pop()}</span></div>;
+  if (m.level === "warn") return <div role="status" className="px-1 text-sm text-amber-700">⚠ {m.title}: {m.detail}</div>;
   return <div role="alert" className="px-1 text-sm text-destructive">✕ {m.title}: {m.detail}</div>;
 }
 
