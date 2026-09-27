@@ -28,7 +28,7 @@ export function LiveCamera({
 }: { zones: Zone[]; onZonesChange: (z: Zone[]) => void; onStatus: (s: CameraStatus) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [deviceId, setDeviceId] = useState<string>("");
+  const [deviceId, setDeviceIdRaw] = useState<string>("");
   const [status, setStatus] = useState<CameraStatus>({ state: "off", analysisFps: 0 });
   const [analyzing, setAnalyzing] = useState(true);
   const [tracked, setTracked] = useState<TrackedDetection[]>([]);
@@ -36,6 +36,13 @@ export function LiveCamera({
   const [draft, setDraft] = useState<BBox | null>(null);
 
   const update = useCallback((s: Partial<CameraStatus>) => setStatus((p) => ({ ...p, ...s })), []);
+  const setDeviceId = useCallback((next: string | ((cur: string) => string)) => {
+    setDeviceIdRaw((cur) => {
+      const id = typeof next === "function" ? next(cur) : next;
+      if (id && id !== cur) update({ state: "starting" });
+      return id;
+    });
+  }, [update]);
   useEffect(() => onStatus(status), [status, onStatus]);
 
   // ---- device discovery: prefer the iPhone (Continuity Camera) when present ----
@@ -44,11 +51,11 @@ export function LiveCamera({
     setDevices(all);
     if (!all.length) update({ state: "none" });
     setDeviceId((cur) => cur && all.some((d) => d.deviceId === cur) ? cur : (all.find((d) => /iphone/i.test(d.label)) ?? all[0])?.deviceId ?? "");
-  }, [update]);
+  }, [update, setDeviceId]);
 
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      update({ state: "error", visionError: "This browser has no camera API (needs https or localhost)." });
+      Promise.resolve().then(() => update({ state: "error", visionError: "This browser has no camera API (needs https or localhost)." }));
       return;
     }
     // Ask once so device labels (e.g. "iPhone Camera") become visible, then enumerate.
@@ -64,7 +71,6 @@ export function LiveCamera({
     if (!deviceId) return;
     let stream: MediaStream | undefined;
     let cancelled = false;
-    update({ state: "starting" });
     navigator.mediaDevices
       .getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false })
       .then((s) => {

@@ -33,7 +33,7 @@ test("consent receipt persists all fields together and is immutable", () => {
   const got = db.getConsent(r.consent_id);
   assert.deepEqual(got, r);
   assert.equal(got?.policy_version, "1.0");
-  assert.throws(() => (globalThis as any).__rlDb.exec(`UPDATE consent_receipts SET policy_version='2.0'`), /immutable/);
+  assert.throws(() => (globalThis as unknown as { __rlDb: { exec(sql: string): void } }).__rlDb.exec(`UPDATE consent_receipts SET policy_version='2.0'`), /immutable/);
 });
 
 test("cart add", () => {
