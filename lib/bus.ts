@@ -27,3 +27,8 @@ export function subscribe(fn: (m: BusMessage) => void): () => void {
 }
 
 export const recentMessages = () => [...recent];
+
+/** Drop the replay buffer (after "forget all memory" the old conversation must not come back on reload). */
+export function clearRecent() {
+  recent.length = 0;
+}

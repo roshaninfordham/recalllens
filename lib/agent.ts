@@ -24,6 +24,9 @@ type ToolCall = { id: string; type: "function"; function: { name: string; argume
 const g = globalThis as unknown as { __rlHistory?: Map<string, Msg[]> };
 const histories = (g.__rlHistory ??= new Map());
 
+/** Forget the local runtime's conversation context (used by "forget all memory"). */
+export const clearHistories = () => histories.clear();
+
 export async function askAgent(message: string, sessionId: string, lang: string): Promise<{ reply: string; mode: AgentMode; ms: number }> {
   const mode = agentMode();
   const t0 = Date.now();

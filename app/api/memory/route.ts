@@ -2,7 +2,8 @@ import { requireConsent } from "@/lib/guard";
 import { clearEvents, recentEvents } from "@/lib/db";
 import { forgetDataset } from "@/lib/cognee";
 import { pipe } from "@/lib/pipeline";
-import { publish } from "@/lib/bus";
+import { clearHistories } from "@/lib/agent";
+import { clearRecent, publish } from "@/lib/bus";
 
 export async function GET() {
   return Response.json(recentEvents(50));
@@ -22,6 +23,8 @@ export async function DELETE(req: Request) {
   pipe.agg.reset();
   pipe.notified.clear();
   pipe.current = [];
+  clearRecent();
+  clearHistories();
   publish({ kind: "log", level: cognee === "ok" ? "ok" : "warn", title: "MEMORY CLEARED", detail: `cognee: ${cognee}` });
   return Response.json({ cleared: true, cognee });
 }

@@ -13,7 +13,11 @@ export function useStream(): { messages: BusMessage[]; connected: boolean } {
       setMessages([]); // server replays its recent buffer on every (re)connect
     };
     es.onerror = () => setConnected(false);
-    es.onmessage = (e) => setMessages((m) => [...m.slice(-299), JSON.parse(e.data)]);
+    es.onmessage = (e) => {
+      const msg = JSON.parse(e.data) as BusMessage;
+      // A memory reset starts a clean session view in every open tab.
+      setMessages((m) => (msg.title === "MEMORY CLEARED" ? [msg] : [...m.slice(-299), msg]));
+    };
     return () => es.close();
   }, []);
   return { messages, connected };
