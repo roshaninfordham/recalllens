@@ -61,7 +61,7 @@ For each item return:
 - zone_id: which labeled zone the item's centre is in. The zones are drawn on the image as labelled rectangles and are:
 ${zoneList}
   Use "unmapped-area" if none fits.
-- state: "damaged" ONLY for visible physical damage (frayed/exposed wires, cracked or broken housing, bent prongs, burn marks); else "normal". "uncertain" if you can't tell.
+- state: inspect each charger's cable and connectors closely before deciding. "damaged" if ANY physical damage is visible: a connector separated or pulled away from its cable, exposed or frayed wires, split or stripped insulation, cracked or broken housing, bent prongs, burn marks. "normal" only if the cable and connectors look intact. "uncertain" if you can't tell.
 - state_confidence 0-1, damage_description: brief if damaged, else "".
 If none of these items are visible return {"objects":[]}. Output JSON only.`;
 }
@@ -109,7 +109,7 @@ export async function analyzeFrame(imageDataUrl: string, zones: Zone[]) {
       ...(cfg.mode === "openai" ? { response_format: { type: "json_schema", json_schema: { name: "detections", strict: true, schema: SCHEMA } } } : {}),
       messages: [
         { role: "system", content: prompt(zones) },
-        { role: "user", content: [{ type: "image_url", image_url: { url: imageDataUrl, detail: "low" } }] },
+        { role: "user", content: [{ type: "image_url", image_url: { url: imageDataUrl, detail: process.env.VISION_DETAIL ?? "low" } }] },
       ],
     }),
     signal: AbortSignal.timeout(20_000),
