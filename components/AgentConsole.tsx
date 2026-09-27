@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { BusMessage } from "@/lib/bus";
 import type { Product } from "@/lib/types";
@@ -47,9 +46,9 @@ export function AgentConsole({ messages }: { messages: BusMessage[] }) {
   const voiceSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
   useEffect(() => {
-    // Braces matter: newer Chrome returns a Promise from scrollIntoView, and React treats a returned value as cleanup.
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [agentMsgs.length]);
+    const el = endRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [agentMsgs.length, busy]);
 
   // Speak new agent replies and proactive notices (once each).
   useEffect(() => {
@@ -117,16 +116,15 @@ export function AgentConsole({ messages }: { messages: BusMessage[] }) {
         </div>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1 rounded-xl border">
+      <div ref={endRef} className="min-h-0 flex-1 overflow-y-auto scroll-smooth rounded-xl border">
         <div className="space-y-2 p-3" aria-live="polite" aria-label="Agent activity">
           {agentMsgs.length === 0 && (
             <p className="p-2 text-sm text-muted-foreground">Ask “Where is my charger?” by voice or text.</p>
           )}
           {agentMsgs.map((m, i) => <AgentLine key={i} m={m} />)}
           {busy && <p className="px-2 text-sm text-muted-foreground animate-pulse">Memory Concierge is thinking…</p>}
-          <div ref={endRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); send(text); }}>
         <Input className="h-12 min-w-0 flex-1 text-base" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Ask or instruct…"} aria-label="Message to the agent" maxLength={1000} />
