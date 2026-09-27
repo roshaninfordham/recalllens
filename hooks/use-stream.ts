@@ -1,0 +1,20 @@
+"use client";
+import { useEffect, useState } from "react";
+import type { BusMessage } from "@/lib/bus";
+
+/** Subscribes to /api/stream (SSE). EventSource reconnects on its own after server restarts. */
+export function useStream(): { messages: BusMessage[]; connected: boolean } {
+  const [messages, setMessages] = useState<BusMessage[]>([]);
+  const [connected, setConnected] = useState(false);
+  useEffect(() => {
+    const es = new EventSource("/api/stream");
+    es.onopen = () => {
+      setConnected(true);
+      setMessages([]); // server replays its recent buffer on every (re)connect
+    };
+    es.onerror = () => setConnected(false);
+    es.onmessage = (e) => setMessages((m) => [...m.slice(-299), JSON.parse(e.data)]);
+    return () => es.close();
+  }, []);
+  return { messages, connected };
+}
