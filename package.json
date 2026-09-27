@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "node --import tsx --test tests/*.test.ts",
     "smoke:cognee": "node --env-file=.env.local --import tsx scripts/smoke-cognee.mts",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "e2e": "./scripts/make-test-camera.sh >/dev/null && node --import tsx scripts/e2e-demo.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -29,6 +30,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "playwright": "^1.63.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
