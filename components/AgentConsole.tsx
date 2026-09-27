@@ -156,11 +156,13 @@ function AgentLine({ m }: { m: BusMessage }) {
     return <div className="ml-8 rounded-xl bg-primary px-3 py-2 text-base text-primary-foreground">{m.detail}</div>;
   if (m.title === "AGENT")
     return <div className="mr-8 rounded-xl bg-muted px-3 py-2 text-base">{m.detail}</div>;
+  if (m.title === "CLAWMAX")
+    return <div className="flex items-center gap-2 px-1 text-sm text-sky-700"><span aria-hidden>↗</span>{m.detail}</div>;
   if (m.title === "PROACTIVE")
     return <div role="status" className="rounded-xl border border-amber-400 bg-amber-50 px-3 py-2 text-base text-amber-950">⚠ {m.detail}</div>;
   const data = m.data as { tool?: string; via?: string } | undefined;
   if (m.title === "TOOL CALL")
-    return <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground"><span aria-hidden>⟳</span>{TOOL_TEXT[data?.tool ?? ""] ?? data?.tool}<code className="truncate text-xs">{m.detail}</code></div>;
+    return <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground"><span aria-hidden>⟳</span>{TOOL_TEXT[data?.tool ?? ""] ?? data?.tool}{data?.via === "clawmax-agent" && <span className="rounded bg-sky-100 px-1 text-xs text-sky-800">via ClawMax</span>}<code className="truncate text-xs">{m.detail}</code></div>;
   if (m.title === "TOOL RESULT")
     return <div className="flex items-center gap-2 px-1 text-sm font-medium text-emerald-700"><span aria-hidden>✓</span>{TOOL_TEXT[data?.tool ?? ""] ?? data?.tool}<span className="text-xs font-normal text-muted-foreground">{m.detail?.split(" ").pop()}</span></div>;
   if (m.level === "warn") return <div role="status" className="px-1 text-sm text-amber-700">⚠ {m.title}: {m.detail}</div>;

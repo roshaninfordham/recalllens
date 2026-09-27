@@ -5,16 +5,20 @@ import { readFileSync } from "node:fs";
 import { Resolver } from "node:dns/promises";
 import { join } from "node:path";
 import { publish } from "./bus";
+import { TOOLS, runTool } from "./tools";
 
-// Phone camera bridge. A tiny server on 127.0.0.1:3100, reachable from the phone only through a Cloudflare quick
-// tunnel (valid HTTPS, works on any network). It serves exactly two things, both gated by a one-time pairing token:
-//   GET  /phone?t=…   the phone page (static HTML, no framework, no Next.js assets)
-//   POST /frame?t=…   one JPEG frame; only the latest frame is kept, in memory
+// Public bridge. A tiny server on 127.0.0.1:3100, reachable only through a Cloudflare quick tunnel (valid HTTPS,
+// works on any network). It serves exactly three things:
+//   GET  /phone?t=…      the phone page (static HTML)               — phone pairing token
+//   POST /frame?t=…      one JPEG frame, latest kept in memory only — phone pairing token
+//   POST /tools/<name>   a Memory Concierge tool, for the hosted ClawMax agent — one-turn bearer token, revoked
+//                        when that agent turn ends
 // The Next.js app itself stays loopback-only and is never exposed.
 
 const PORT = Number(process.env.RECALLLENS_BRIDGE_PORT ?? 3100);
 const MAX_FRAME_BYTES = 800_000;
 const IDLE_MS = 10 * 60_000;
+const MAX_TOOL_BODY = 8_000;
 
 interface Pairing {
   token: string;
@@ -31,16 +35,32 @@ interface BridgeState {
   pairing?: Pairing;
   idleTimer?: NodeJS.Timeout;
   starting?: Promise<void>;
+  /** One-turn tokens for the hosted agent's tool calls → the RecallLens session they act for. */
+  turnTokens?: Map<string, { sessionId: string; expiresAt: number }>;
 }
 
 const g = globalThis as unknown as { __rlBridge?: BridgeState };
 const state = (g.__rlBridge ??= {});
+const turnTokens = (state.turnTokens ??= new Map());
+
+const safeEqual = (a: string, b: string) => {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+};
+
+function turnSession(auth: string | undefined): string | null {
+  const supplied = auth?.replace(/^Bearer\s+/i, "") ?? "";
+  for (const [token, t] of turnTokens) {
+    if (t.expiresAt < Date.now()) turnTokens.delete(token);
+    else if (supplied && safeEqual(supplied, token)) return t.sessionId;
+  }
+  return null;
+}
 
 const tokenOk = (supplied: string | null) => {
   const p = state.pairing;
   if (!p || !supplied) return false;
-  const a = Buffer.from(supplied), b = Buffer.from(p.token);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return safeEqual(supplied, p.token);
 };
 
 function phonePage(): string {
@@ -53,6 +73,7 @@ function handle(req: import("node:http").IncomingMessage, res: import("node:http
     res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" });
     res.end(body);
   };
+  if (req.method === "POST" && url.pathname.startsWith("/tools/")) return handleTool(req, url.pathname.slice(7), send);
   if (!tokenOk(url.searchParams.get("t"))) return send(403, "This pairing link is invalid or has expired. Scan a new QR code on your laptop.");
 
   if (req.method === "GET" && url.pathname === "/phone") return send(200, phonePage(), "text/html; charset=utf-8");
@@ -82,10 +103,35 @@ function handle(req: import("node:http").IncomingMessage, res: import("node:http
   send(404);
 }
 
+function handleTool(req: import("node:http").IncomingMessage, name: string, send: (code: number, body?: string, type?: string) => void) {
+  const sessionId = turnSession(req.headers.authorization);
+  if (!sessionId) return send(401, JSON.stringify({ error: "missing or expired turn token" }), "application/json");
+  if (!TOOLS[name]) return send(404, JSON.stringify({ error: `unknown tool ${name}`, tools: Object.keys(TOOLS) }), "application/json");
+  let body = "";
+  req.on("data", (c: Buffer) => {
+    body += c;
+    if (body.length > MAX_TOOL_BODY) req.destroy();
+  });
+  req.on("end", async () => {
+    armIdleTimer();
+    let args: Record<string, unknown> = {};
+    try {
+      args = body ? JSON.parse(body) : {};
+    } catch {
+      return send(400, JSON.stringify({ error: "body must be JSON" }), "application/json");
+    }
+    try {
+      send(200, JSON.stringify(await runTool(name, args, { sessionId, via: "clawmax-agent" })), "application/json");
+    } catch (e) {
+      send(502, JSON.stringify({ error: (e as Error).message }), "application/json");
+    }
+  });
+}
+
 function armIdleTimer() {
   clearTimeout(state.idleTimer);
   state.idleTimer = setTimeout(() => {
-    publish({ kind: "log", level: "warn", title: "PHONE DISCONNECTED", detail: "No frames for 10 minutes; tunnel closed" });
+    publish({ kind: "log", level: "warn", title: "BRIDGE CLOSED", detail: "No phone frames or agent tool calls for 10 minutes; tunnel closed" });
     stopBridge();
   }, IDLE_MS);
 }
@@ -167,13 +213,35 @@ async function waitUntilReachable(url: string) {
  * has used yet is returned again rather than replaced (so a double-mounted UI doesn't invalidate its own QR code).
  */
 export async function startPairing(): Promise<{ url: string; expiresInMs: number }> {
-  state.starting ??= ensureRunning().finally(() => (state.starting = undefined));
-  await state.starting;
+  await ensureBridge();
   if (!state.pairing || state.pairing.frames > 0) {
     state.pairing = { token: randomBytes(24).toString("base64url"), createdAt: Date.now(), frames: 0 };
   }
   armIdleTimer();
   return { url: `${state.publicUrl}/phone?t=${state.pairing.token}`, expiresInMs: IDLE_MS };
+}
+
+/** Starts the bridge if needed and returns its public URL (shared by phone pairing and the hosted agent). */
+export async function ensureBridge(): Promise<string> {
+  state.starting ??= ensureRunning().finally(() => (state.starting = undefined));
+  await state.starting;
+  armIdleTimer();
+  return state.publicUrl!;
+}
+
+/** A bearer token valid for one agent turn (revoke it when the turn ends; it also expires on its own). */
+export function issueTurnToken(sessionId: string, ttlMs = 180_000): string {
+  const token = randomBytes(24).toString("base64url");
+  turnTokens.set(token, { sessionId, expiresAt: Date.now() + ttlMs });
+  return token;
+}
+
+export const revokeTurnToken = (token: string) => turnTokens.delete(token);
+
+/** Ends phone pairing; the tunnel stays up only while the hosted agent still has live turn tokens. */
+export function endPairing() {
+  state.pairing = undefined;
+  if (![...turnTokens.values()].some((t) => t.expiresAt > Date.now())) stopBridge();
 }
 
 export function stopBridge() {

@@ -1,5 +1,5 @@
 import { requireConsent } from "@/lib/guard";
-import { bridgeStatus, startPairing, stopBridge } from "@/lib/bridge";
+import { bridgeStatus, endPairing, startPairing } from "@/lib/bridge";
 import { publish } from "@/lib/bus";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export async function GET() {
 export async function DELETE(req: Request) {
   const denied = requireConsent(req);
   if (denied) return denied;
-  stopBridge();
-  publish({ kind: "log", title: "PHONE DISCONNECTED", detail: "Tunnel closed" });
+  endPairing();
+  publish({ kind: "log", title: "PHONE DISCONNECTED", detail: "Pairing ended" });
   return Response.json(bridgeStatus());
 }

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { publish } from "./bus";
 import { TOOLS, runTool } from "./tools";
+import { ensureBridge, issueTurnToken, revokeTurnToken } from "./bridge";
 
 // Memory Concierge runtime.
 //  - "clawmax": ClawMax chat API (POST /api/agents/:id/chat, SSE). The ClawMax agent runs the skills in clawmax/,
@@ -52,16 +53,46 @@ export async function askAgent(message: string, sessionId: string, lang: string)
   return { reply, mode: used, ms: Date.now() - t0 };
 }
 
+// A ClawMax session that failed once (e.g. a provider auth error) can stay stuck, so a failure rotates it.
+// A per-start suffix also gives each server start fresh ClawMax sessions (RecallLens's own memory is in Cognee).
+const gs = globalThis as unknown as { __rlClawmaxGen?: Map<string, number>; __rlBoot?: string };
+const sessionGen = (gs.__rlClawmaxGen ??= new Map());
+const boot = (gs.__rlBoot ??= Date.now().toString(36));
+
 async function viaClawMax(message: string, sessionId: string, lang: string): Promise<string> {
   const id = process.env.CLAWMAX_AGENT_ID || "memory-concierge";
+  publish({ kind: "agent", title: "CLAWMAX", detail: `Sent to ClawMax agent “${id}” (hosted; replies take about 1–2 minutes)` });
+  // The hosted agent reaches RecallLens's tools through the bridge with a token valid for this turn only.
+  const toolsUrl = `${await ensureBridge()}/tools`;
+  const token = issueTurnToken(sessionId);
+  const gen = sessionGen.get(sessionId) ?? 0;
+  try {
+    return await clawmaxTurn(id, `[RecallLens tools: ${toolsUrl} · turn token: ${token} (valid for this reply only) · user language: ${lang}]\n${message}`, `${sessionId}-${boot}-${gen}`);
+  } catch (e) {
+    sessionGen.set(sessionId, gen + 1);
+    throw e;
+  } finally {
+    revokeTurnToken(token);
+  }
+}
+
+async function clawmaxTurn(id: string, message: string, sessionId: string): Promise<string> {
   const res = await fetch(`${process.env.CLAWMAX_BASE_URL!.replace(/\/$/, "")}/api/agents/${id}/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(process.env.CLAWMAX_DASHBOARD_TOKEN ? { Authorization: `Bearer ${process.env.CLAWMAX_DASHBOARD_TOKEN}` } : {}),
     },
-    body: JSON.stringify({ message: `[user language: ${lang}] ${message}`, sessionId }),
-    signal: AbortSignal.timeout(120_000),
+    // Hosted instances keep model keys browser-local, so the key travels per request (HTTPS, never in the prompt).
+    // It goes as an "OpenAI-compatible" provider: that path uses Chat Completions, which restricted project keys
+    // allow; the native "openai" provider uses the Responses API and fails without the api.responses.write scope.
+    body: JSON.stringify({
+      message, sessionId,
+      ...(process.env.CLAWMAX_BYOK_OPENAI === "1" && process.env.OPENAI_API_KEY
+        ? { byok: { openaiCompatibleBaseUrl: "https://api.openai.com/v1", openaiCompatibleApiKey: process.env.OPENAI_API_KEY, openaiCompatibleDefaultModel: "gpt-4.1" } }
+        : {}),
+    }),
+    signal: AbortSignal.timeout(180_000),
   });
   if (!res.ok || !res.body) throw new Error(`ClawMax chat ${res.status}: ${(await res.text()).slice(0, 160)}`);
   // SSE: data: {"type":"start|delta|complete|error","data":{...}}. Only "complete" counts as success.
