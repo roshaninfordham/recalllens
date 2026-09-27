@@ -166,7 +166,7 @@ export function LiveCamera({
       <div className="flex flex-wrap items-center gap-2">
         <Select value={deviceId} onValueChange={(v) => setDeviceId(v ?? "")}>
           <SelectTrigger className="h-10 w-64" aria-label="Camera source">
-            <SelectValue placeholder="Choose camera" />
+            <SelectValue placeholder="Choose camera">{(v: string) => devices.find((d) => d.deviceId === v)?.label || (v ? "Camera" : "Choose camera")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {devices.map((d, i) => (

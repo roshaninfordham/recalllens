@@ -107,9 +107,13 @@ export function AgentConsole({ messages }: { messages: BusMessage[] }) {
     <section aria-labelledby="agent-title" className="flex min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between">
         <h2 id="agent-title" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Memory Concierge</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <Select value={lang} onValueChange={(v) => setLang(v ?? "en-US")}>
+            <SelectTrigger size="sm" className="w-36" aria-label="Speech language"><SelectValue>{(v: string) => LANGS.find(([code]) => code === v)?.[1] ?? v}</SelectValue></SelectTrigger>
+            <SelectContent>{LANGS.map(([v, n]) => <SelectItem key={v} value={v}>{n}</SelectItem>)}</SelectContent>
+          </Select>
           <Switch id="speak" checked={speak} onCheckedChange={setSpeak} />
-          <Label htmlFor="speak" className="text-sm">Speak replies</Label>
+          <Label htmlFor="speak" className="text-sm">Speak</Label>
         </div>
       </div>
 
@@ -125,11 +129,7 @@ export function AgentConsole({ messages }: { messages: BusMessage[] }) {
       </ScrollArea>
 
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); send(text); }}>
-        <Select value={lang} onValueChange={(v) => setLang(v ?? "en-US")}>
-          <SelectTrigger className="h-12 w-28 shrink-0" aria-label="Speech language"><SelectValue /></SelectTrigger>
-          <SelectContent>{LANGS.map(([v, n]) => <SelectItem key={v} value={v}>{n}</SelectItem>)}</SelectContent>
-        </Select>
-        <Input className="h-12 text-base" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Ask or instruct…"} aria-label="Message to the agent" maxLength={1000} />
+        <Input className="h-12 min-w-0 flex-1 text-base" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : "Ask or instruct…"} aria-label="Message to the agent" maxLength={1000} />
         {voiceSupported && (
           <Button type="button" size="lg" className={`h-12 ${listening ? "bg-red-600 hover:bg-red-600/90" : ""}`} variant={listening ? "default" : "outline"} onClick={toggleMic} aria-pressed={listening} aria-label={listening ? "Stop listening" : "Speak"}>
             {listening ? "■ Stop" : "🎤 Speak"}
