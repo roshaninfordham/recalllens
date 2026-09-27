@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>RecallLens camera</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fafafa; --fg: #111; --muted: #666; --card: #fff; --ok: #16a34a; --bad: #dc2626; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0b0b0b; --fg: #eee; --muted: #aaa; --card: #171717; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 17px/1.4 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  p { margin: 4px 0 12px; color: var(--muted); }
+  video { width: 100%; max-height: 60vh; object-fit: contain; background: #000; border-radius: 14px; display: block; }
+  .row { display: flex; gap: 10px; margin-top: 14px; }
+  button { flex: 1; font: inherit; font-weight: 600; min-height: 52px; border-radius: 12px; border: 1px solid #8884; background: var(--card); color: var(--fg); }
+  button.primary { background: var(--fg); color: var(--bg); border: none; }
+  button:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
+  #status { margin-top: 12px; font-weight: 600; }
+  #status.ok { color: var(--ok); } #status.bad { color: var(--bad); }
+</style>
+</head>
+<body>
+  <h1>RecallLens camera</h1>
+  <p>Your phone is the camera for RecallLens on your laptop. Frames go only to your laptop and are not stored.</p>
+  <video id="v" playsinline muted autoplay aria-label="Camera preview"></video>
+  <div id="status" role="status" aria-live="polite">Tap Start to share your camera.</div>
+  <div class="row">
+    <button id="start" class="primary">Start</button>
+    <button id="flip" hidden>Flip camera</button>
+    <button id="stop" hidden>Stop</button>
+  </div>
+<script>
+(() => {
+  const token = new URLSearchParams(location.search).get("t");
+  const v = document.getElementById("v"), status = document.getElementById("status");
+  const startBtn = document.getElementById("start"), flipBtn = document.getElementById("flip"), stopBtn = document.getElementById("stop");
+  const canvas = document.createElement("canvas");
+  let stream = null, facing = "environment", running = false, sent = 0, t0 = 0;
+  const say = (text, cls) => { status.textContent = text; status.className = cls || ""; };
+
+  async function open() {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    v.srcObject = stream;
+    await v.play();
+  }
+
+  async function loop() {
+    while (running) {
+      const started = performance.now();
+      if (v.videoWidth) {
+        const scale = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
+        canvas.width = Math.round(v.videoWidth * scale);
+        canvas.height = Math.round(v.videoHeight * scale);
+        canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", 0.7));
+        try {
+          // One frame in flight at a time: a slow network lowers the frame rate instead of queueing.
+          const res = await fetch("/frame?t=" + encodeURIComponent(token), { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
+          if (res.status === 403) { say("This pairing expired. Scan a new QR code on your laptop.", "bad"); stop(); return; }
+          sent++;
+          const fps = sent / ((performance.now() - t0) / 1000);
+          say("● Live to your laptop · " + fps.toFixed(1) + " fps", "ok");
+        } catch {
+          say("Connection lost, retrying…", "bad");
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+      await new Promise((r) => setTimeout(r, Math.max(0, 120 - (performance.now() - started))));
+    }
+  }
+
+  function stop() {
+    running = false;
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+    startBtn.hidden = false; flipBtn.hidden = true; stopBtn.hidden = true;
+  }
+
+  startBtn.onclick = async () => {
+    try {
+      await open();
+      running = true; sent = 0; t0 = performance.now();
+      startBtn.hidden = true; flipBtn.hidden = false; stopBtn.hidden = false;
+      say("Connecting…");
+      loop();
+    } catch (e) {
+      say(e && e.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access for this site and try again." : "Could not open the camera: " + (e && e.message), "bad");
+    }
+  };
+  flipBtn.onclick = async () => { facing = facing === "environment" ? "user" : "environment"; try { await open(); } catch (e) { say("Could not switch camera.", "bad"); } };
+  stopBtn.onclick = () => { stop(); say("Stopped. Tap Start to share again."); };
+})();
+</script>
+</body>
+</html>
