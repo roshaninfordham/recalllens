@@ -1,5 +1,5 @@
 import type { Detection, MemoryEvent, ObjectState, TrackedDetection, Zone } from "./types";
-import { zoneFor } from "./zones";
+import { UNKNOWN_ZONE, zoneFor } from "./zones";
 
 interface Track {
   object_id: string;
@@ -77,7 +77,8 @@ export class ObservationAggregator {
     const claimed = new Set<string>();
 
     for (const d of detections) {
-      const zone = zoneFor(d.bbox, zones);
+      const boxZone = zoneFor(d.bbox, zones);
+      const zone = boxZone === UNKNOWN_ZONE && d.zone_hint ? d.zone_hint : boxZone;
       const cx = d.bbox.x + d.bbox.width / 2;
       const cy = d.bbox.y + d.bbox.height / 2;
       const category = categoryOf(d.label);

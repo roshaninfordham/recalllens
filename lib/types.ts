@@ -15,6 +15,8 @@ export interface Detection {
   state: ObjectState;
   state_confidence: number;
   damage_description?: string;
+  /** Zone the model itself picked; used only when the bbox centre falls outside every drawn zone. */
+  zone_hint?: string;
 }
 
 /** A detection after tracking: stable id + zone assigned from the bbox. */
