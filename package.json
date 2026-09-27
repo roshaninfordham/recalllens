@@ -10,10 +10,13 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "smoke:cognee": "node --env-file=.env.local --import tsx scripts/smoke-cognee.mts",
     "typecheck": "next typegen && tsc --noEmit",
-    "e2e": "./scripts/make-test-camera.sh >/dev/null && node --import tsx scripts/e2e-demo.mts"
+    "e2e": "./scripts/make-test-camera.sh >/dev/null && node --import tsx scripts/e2e-demo.mts",
+    "eval:vision": "node --env-file=.env.local --import tsx scripts/eval-vision.mts",
+    "eval:detector": "node --env-file=.env.local --import tsx scripts/eval-detector.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@mediapipe/tasks-vision": "^1.0.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "lucide-react": "^1.48.0",
