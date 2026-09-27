@@ -43,7 +43,9 @@ export function LiveCamera({
       return id;
     });
   }, [update]);
-  useEffect(() => onStatus(status), [status, onStatus]);
+  useEffect(() => {
+    onStatus(status);
+  }, [status, onStatus]);
 
   // ---- device discovery: prefer the iPhone (Continuity Camera) when present ----
   const refreshDevices = useCallback(async () => {

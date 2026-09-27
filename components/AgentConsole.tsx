@@ -46,7 +46,10 @@ export function AgentConsole({ messages }: { messages: BusMessage[] }) {
   const agentMsgs = messages.filter((m) => m.kind === "agent");
   const voiceSupported = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [agentMsgs.length]);
+  useEffect(() => {
+    // Braces matter: newer Chrome returns a Promise from scrollIntoView, and React treats a returned value as cleanup.
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [agentMsgs.length]);
 
   // Speak new agent replies and proactive notices (once each).
   useEffect(() => {
