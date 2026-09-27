@@ -7,6 +7,7 @@
 // Usage: npm run dev (other terminal), then: npm run e2e
 import { chromium, type Browser, type BrowserContextOptions, type Page } from "playwright";
 import { resolve } from "node:path";
+import { DEFAULT_ZONES } from "../lib/zones.ts";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000";
 const SHOTS = resolve("docs/screenshots");
@@ -59,12 +60,13 @@ try {
   log("consent accepted");
 
   // Start from a clean memory and cart.
-  await page.evaluate(async () => {
+  await page.evaluate(async (DEFAULT_ZONES) => {
     const h = { "x-consent-id": localStorage.getItem("recalllens.consent_id") ?? "" };
     await fetch("/api/memory", { method: "DELETE", headers: h });
     await fetch("/api/cart", { method: "DELETE", headers: h });
-  });
-  log("memory + cart cleared");
+    await fetch("/api/settings", { method: "PUT", headers: { ...h, "Content-Type": "application/json" }, body: JSON.stringify({ zones: DEFAULT_ZONES }) });
+  }, DEFAULT_ZONES);
+  log("memory, cart and zones reset");
 
   // 2. Live camera → vision → FIRST_SEEN written to Cognee.
   await page.getByText("LIVE", { exact: true }).first().waitFor({ timeout: 20_000 });

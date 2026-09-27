@@ -12,7 +12,9 @@
     "typecheck": "next typegen && tsc --noEmit",
     "e2e": "./scripts/make-test-camera.sh >/dev/null && node --import tsx scripts/e2e-demo.mts",
     "eval:vision": "node --env-file=.env.local --import tsx scripts/eval-vision.mts",
-    "eval:detector": "node --env-file=.env.local --import tsx scripts/eval-detector.mts"
+    "eval:detector": "node --env-file=.env.local --import tsx scripts/eval-detector.mts",
+    "predev": "./scripts/setup-models.sh >/dev/null",
+    "pree2e": "./scripts/setup-models.sh >/dev/null"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
