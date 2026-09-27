@@ -15,7 +15,8 @@
     "eval:detector": "node --env-file=.env.local --import tsx scripts/eval-detector.mts",
     "predev": "./scripts/setup-models.sh >/dev/null",
     "pree2e": "./scripts/setup-models.sh >/dev/null",
-    "e2e:phone": "node --import tsx scripts/e2e-phone.mts"
+    "e2e:phone": "node --import tsx scripts/e2e-phone.mts",
+    "clawmax:setup": "node --env-file=.env.local --import tsx scripts/clawmax-setup.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -1,22 +1,30 @@
 ---
 name: cognee-memory
-description: Recall and manage the user's spatial memory (where everyday objects were last seen) stored in Cognee via the local RecallLens API.
+description: Recall where the user's everyday objects were last seen (spatial memory stored in Cognee) through RecallLens's tool API.
 tags: [memory, cognee, recalllens]
 metadata: {"openclaw":{"requires":{"bins":["curl"]}}}
 ---
 
 # cognee-memory
 
-RecallLens runs on the same machine at `http://127.0.0.1:3000`. Every tool is a JSON POST; responses are JSON.
-The RecallLens server holds the Cognee credentials. Never send or store secrets.
+Every message from RecallLens starts with a header like:
 
-| Tool | Call |
-|---|---|
-| recall_object | `curl -s -X POST http://127.0.0.1:3000/api/tools/recall_object -H 'Content-Type: application/json' -d '{"object":"charger"}'` |
-| recall_recent_events | `curl -s -X POST http://127.0.0.1:3000/api/tools/recall_recent_events -H 'Content-Type: application/json' -d '{"limit":8}'` |
-| current_view | `curl -s -X POST http://127.0.0.1:3000/api/tools/current_view -d '{}'` |
-| remember_observation | `curl -s -X POST http://127.0.0.1:3000/api/tools/remember_observation -H 'Content-Type: application/json' -d '{"object":"house keys","zone":"desk"}'` |
-| forget_memory | `curl -s -X POST http://127.0.0.1:3000/api/tools/forget_memory -H 'Content-Type: application/json' -d '{"data_id":"<id>"}'` |
+`[RecallLens tools: https://<host>/tools · turn token: <TOKEN> (valid for this reply only) · user language: en-US]`
 
-`recall_object` returns `{found, last_seen:{zone_name, timestamp, age_seconds, state, confidence, confidence_band}, history[]}`.
-Answer from `last_seen` only; if `found` is false, say you have no reliable memory. Full schemas: `GET /api/tools`.
+Use that URL and token for every call in this reply. Each tool is a JSON POST; replies are JSON. The token expires when
+your reply ends: never store it, repeat it to the user, or put it in memory.
+
+```bash
+curl -s -X POST "<URL>/recall_object" -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" -d '{"object":"charger"}'
+```
+
+| Tool | Body | Returns |
+|---|---|---|
+| `recall_object` | `{"object":"charger"}` | `{found, last_seen:{zone_name, timestamp, age_seconds, state, damage_description, confidence, confidence_band}, history[]}` |
+| `recall_recent_events` | `{"limit":8}` | newest memory events |
+| `current_view` | `{}` | what the camera sees right now (live, not memory) |
+| `remember_observation` | `{"object":"house keys","zone":"desk"}` | stores something the user told you |
+| `forget_memory` | `{"data_id":"<id>"}` | deletes one stored observation |
+
+Answer location questions only from `last_seen`. If `found` is false, say you have no reliable memory of it; never guess.
+A `401` means the token expired: say so instead of retrying with anything else.
