@@ -49,6 +49,14 @@ export function AgentConsole({ messages }: { messages: BusMessage[] }) {
     const el = endRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [agentMsgs.length, busy]);
+  // Stay pinned to the newest message when the box shrinks (e.g. the cart appears below it).
+  useEffect(() => {
+    const el = endRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => { el.scrollTop = el.scrollHeight; });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Speak new agent replies and proactive notices (once each).
   useEffect(() => {

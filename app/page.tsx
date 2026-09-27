@@ -52,7 +52,7 @@ function App() {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-dvh flex-col gap-4 bg-muted/40 p-4 lg:h-dvh lg:overflow-hidden">
+      <div className="flex min-h-dvh flex-col gap-4 bg-muted/40 p-4">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">RecallLens</h1>
@@ -61,7 +61,7 @@ function App() {
           <SystemStatus camera={camera} streamConnected={connected} />
         </header>
 
-        <main className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+        <main className="grid gap-4 lg:h-[calc(100dvh-9.5rem)] lg:min-h-[36rem] lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
           <div className="min-h-0 rounded-2xl border bg-background p-4">
             <LiveCamera zones={zones} onZonesChange={onZones} onStatus={setCamera} />
           </div>
