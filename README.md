@@ -2,18 +2,33 @@
 
 **Your world, remembered.** See · Remember · Act
 
-RecallLens is a personal spatial memory agent. A camera (an iPhone today, smart glasses tomorrow) watches your space; RecallLens turns what it sees into a small set of meaningful, timestamped observations, stores them in **Cognee**, and lets a **ClawMax** agent recall them and act on them.
+RecallLens is a personal spatial memory agent. A camera (your laptop webcam or an iPhone today, smart glasses tomorrow) watches your space; RecallLens turns what it sees into a small set of meaningful, timestamped observations, stores them in **Cognee**, and lets a **ClawMax** agent recall them and act on them.
 
 > "Where is my charger?" → *"I last saw your USB-C charger on the back table in the hall, about two minutes ago."*
 > The charger turns out to be damaged → *"Mera charger toot gaya hai, naya dhoondo"* → the agent finds a compatible replacement and adds it to a cart. It never purchases.
 
 A personal memory and assistance system. Not a medical or diagnostic device.
 
+## Screenshots
+
+Captured automatically by the end-to-end run (`npm run e2e`). Real app, real vision, real Cognee, real agent; the "camera" is a synthetic test stream (a room photo with a charger photo on the back table), fed to Chromium as its webcam.
+
+| | |
+|---|---|
+| **1. Consent gate** Policy v1.0, participant id, three required acknowledgements; camera stays off until accepted. | **2. See + remember** Live camera, zone overlay and detection; the observation is written to Cognee. |
+| ![Consent gate](docs/screenshots/01-consent.png) | ![Live detection and memory](docs/screenshots/02-live-detection-memory.png) |
+| **3. Recall** "Where is my charger?" → agent recalls from Cognee and answers with place and time. | **4. Notice** The charger is now broken: state changes to DAMAGED, one proactive notice. |
+| ![Recall answer](docs/screenshots/03-recall-answer.png) | ![Damage detected](docs/screenshots/04-damage-detected.png) |
+| **5. Act** Hinglish request → phone compatibility → product search → add to cart. Not purchased. | **6. Proof** Developer panel: every hop in the live event log, plus the labelled demo failsafe. |
+| ![Replacement in cart](docs/screenshots/05-replacement-in-cart.png) | ![Developer panel](docs/screenshots/06-developer-panel.png) |
+| **7. Calibrate** Drag to place each named zone over the camera view. | |
+| ![Zone editor](docs/screenshots/07-zone-editor.png) | |
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[iPhone Camera] --> B[Browser Live Video]
+    A[Laptop camera or iPhone] --> B[Browser Live Video]
     B --> C[Frame Sampler<br/>thumbnail diff, 0.5–2 FPS]
     C --> D[Vision Adapter<br/>OpenAI-compatible]
     D --> E[Observation Aggregator<br/>track · hysteresis · dedup]
@@ -75,11 +90,10 @@ npm run dev                  # http://127.0.0.1:3000 (bound to loopback on purpo
 
 Health: `GET /api/health` → `{ cognee, clawmax, agent, vision, commerce, detail }`. Camera and voice are browser capabilities and are shown in the UI status bar.
 
-### Connect the iPhone camera
-1. Same Apple ID on iPhone and Mac, Wi-Fi + Bluetooth on (Continuity Camera; macOS 13+/iOS 16+).
-2. Put the iPhone near the Mac, locked, in landscape, ideally on a stand.
-3. Open RecallLens → accept consent → allow camera. The picker prefers any camera named "iPhone"; pick it manually otherwise.
-4. If the iPhone disconnects, the UI says so; reconnect or pick another camera.
+### Camera
+The **built-in laptop camera works end to end**: open RecallLens, accept consent, allow camera, done. The picker lists every camera.
+
+Optional, for a wider or movable view: an **iPhone as Continuity Camera** (same Apple ID on iPhone and Mac, Wi-Fi + Bluetooth on, macOS 13+/iOS 16+). Put it near the Mac, locked, in landscape; the picker prefers it automatically when present. If it disconnects, the UI says so and you can switch back to the built-in camera.
 
 ### Calibrate zones
 Default zones are four quadrants (Desk, Couch, Hall / Front Table, Hall / Back Table). Click **Edit zones**, choose a zone, drag a rectangle over the part of the view it represents. Zones are drawn onto the frames sent to vision, so the model and the zone map agree.
@@ -116,6 +130,7 @@ Works with a **ClawMax running on this Mac** (open-source ClawMax, `./SYSTEM/sta
 ```bash
 npm test               # unit: consent, redaction, sampling/dedup, aggregation, movement, state change, Cognee parsing, confidence, search, cart
 npm run smoke:cognee   # live: remember → recall → forget against your Cognee tenant
+npm run e2e            # live end-to-end through the UI with a synthetic camera; refreshes docs/screenshots (needs npm run dev)
 npm run lint && npm run typecheck && npm run build
 ```
 
@@ -136,9 +151,16 @@ CI runs lint, typecheck, tests and build on every push (`.github/workflows/ci.ym
 ## Troubleshooting
 | Symptom | Fix |
 |---|---|
+| Laptop camera shows "No camera available" | macOS System Settings → Privacy & Security → Camera → enable your browser |
 | Camera "denied" | Chrome → site settings for 127.0.0.1 → Camera → Allow, reload |
-| No iPhone in picker | Check Continuity Camera requirements above; unplug/replug; restart the browser |
+| No iPhone in picker (optional) | Check Continuity Camera requirements above; unplug/replug; restart the browser |
 | Cognee "authentication failed" | Check `COGNEE_API_KEY` and `COGNEE_TENANT_ID` |
 | Agent says it has no memory right after placing an item | Wait ~30 s for Cognee indexing, then ask again |
 | Vision error 401 | `OPENAI_API_KEY` wrong or expired |
 | Voice button missing | Browser lacks Web Speech; type instead |
+
+## Credits
+Test-scene photos (downloaded at run time by `scripts/make-test-camera.sh`, not stored in the repo; the screenshots above contain them and are shared under the same terms):
+- *Newark Park Buff Room, Ozleworth* by Acabashi, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), Wikimedia Commons
+- *Apple USB-C 87W Power Adapter* by Tony Webster, [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/), Wikimedia Commons
+- *Broken USB Type-C Cable* by Eavesdropper6735, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), Wikimedia Commons
