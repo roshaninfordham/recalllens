@@ -215,7 +215,7 @@ export function LiveCamera({
           return (
             <div key={`${d.object_id}-${i}`} style={boxStyle(d.bbox)}
               className={`absolute rounded-md border-[3px] transition-all duration-300 ${damaged ? "border-red-500" : "border-emerald-400"}`}>
-              <div className={`absolute left-0 whitespace-nowrap ${d.bbox.y < 0.14 ? "top-full mt-1" : "-top-1 -translate-y-full"} rounded-md px-2 py-1 text-xs font-semibold leading-tight text-white shadow ${damaged ? "bg-red-600" : "bg-emerald-600"}`}>
+              <div className={`absolute whitespace-nowrap ${d.bbox.x + d.bbox.width > 0.6 ? "right-0" : "left-0"} ${d.bbox.y < 0.14 ? "top-full mt-1" : "-top-1 -translate-y-full"} rounded-md px-2 py-1 text-xs font-semibold leading-tight text-white shadow ${damaged ? "bg-red-600" : "bg-emerald-600"}`}>
                 <div className="text-sm">{d.label}</div>
                 <div className="font-normal opacity-95">{Math.round(d.confidence * 100)}% · {zoneName} · {d.state.toUpperCase()}</div>
               </div>
@@ -238,7 +238,7 @@ export function LiveCamera({
       </div>
       {status.visionError && <p role="alert" className="text-sm text-destructive">{status.visionError}</p>}
       {status.state === "live" && !/iphone/i.test(status.label ?? "") && (
-        <p className="text-sm text-muted-foreground">Tip: place your iPhone near the Mac (same Apple ID, Wi-Fi and Bluetooth on) and it appears here as a camera.</p>
+        <p className="text-sm text-muted-foreground">Using the built-in camera works end to end. Optional: an iPhone near the Mac (Continuity Camera) appears in the list for a wider, movable view.</p>
       )}
     </section>
   );
