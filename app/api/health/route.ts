@@ -7,15 +7,15 @@ export const dynamic = "force-dynamic";
 
 async function clawmaxHealth() {
   const mode = agentMode();
-  if (mode !== "clawmax") return { ok: mode === "local", mode, detail: mode === "local" ? "local runtime · ClawMax-issued model key" : "not configured" };
+  if (mode !== "clawmax") return { ok: false, agent: mode === "local", mode, detail: mode === "local" ? "workspace not connected · agent runs locally on ClawMax-issued key" : "not configured" };
   try {
     const r = await fetch(`${process.env.CLAWMAX_BASE_URL!.replace(/\/$/, "")}/api/agents`, {
       headers: process.env.CLAWMAX_DASHBOARD_TOKEN ? { Authorization: `Bearer ${process.env.CLAWMAX_DASHBOARD_TOKEN}` } : {},
       signal: AbortSignal.timeout(5000),
     });
-    return { ok: r.ok, mode, detail: r.ok ? "connected" : `HTTP ${r.status}` };
+    return { ok: r.ok, agent: r.ok, mode, detail: r.ok ? "connected" : `HTTP ${r.status}` };
   } catch (e) {
-    return { ok: false, mode, detail: (e as Error).message };
+    return { ok: false, agent: false, mode, detail: (e as Error).message };
   }
 }
 
@@ -28,7 +28,7 @@ export async function GET() {
   ]);
   const v = visionConfig();
   return Response.json({
-    cognee: cognee.ok, clawmax: clawmax.ok, vision: v.mode !== "none", commerce: products,
+    cognee: cognee.ok, clawmax: clawmax.ok, agent: clawmax.agent, vision: v.mode !== "none", commerce: products,
     detail: {
       cognee: cogneeConfigured() ? cognee.detail : "not configured",
       clawmax: clawmax.detail, agent_mode: clawmax.mode,

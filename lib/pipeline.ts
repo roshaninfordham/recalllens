@@ -60,7 +60,7 @@ export function ingest(detections: Detection[], source: MemoryEvent["source"], c
       pipe.notified.add(e.object_id);
       publish({
         kind: "agent", level: "warn", title: "PROACTIVE",
-        detail: `Your ${e.label.toLowerCase()} appears damaged. I can find a compatible replacement if you'd like.`,
+        detail: `Your ${e.label} appears damaged. I can find a compatible replacement if you'd like.`,
       });
     }
   }
