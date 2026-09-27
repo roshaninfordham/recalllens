@@ -44,7 +44,7 @@ export interface MemoryEvent {
   confidence: number;
   damage_description?: string;
   timestamp: string; // ISO-8601 UTC
-  source: "live_camera" | "demo_event";
+  source: "live_camera" | "demo_event" | "user_told";
 }
 
 export interface Zone {
