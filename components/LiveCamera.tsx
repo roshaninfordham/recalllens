@@ -6,8 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/client";
+import { blobToDataUrl, createDetector } from "@/lib/detector-client";
 import { SAMPLING, frameDiff, shouldAnalyze } from "@/lib/sampling";
-import type { BBox, TrackedDetection, Zone } from "@/lib/types";
+import type { BBox, Detection, Proposal, TrackedDetection, Zone } from "@/lib/types";
+import { DEFAULT_ZONES } from "@/lib/zones";
 
 export interface CameraStatus {
   state: "off" | "starting" | "live" | "denied" | "none" | "error";
@@ -18,6 +20,7 @@ export interface CameraStatus {
   visionLatency?: number;
   visionMode?: string;
   visionError?: string;
+  detector?: string;
 }
 
 const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
@@ -32,6 +35,10 @@ export function LiveCamera({
   const [status, setStatus] = useState<CameraStatus>({ state: "off", analysisFps: 0 });
   const [analyzing, setAnalyzing] = useState(true);
   const [tracked, setTracked] = useState<TrackedDetection[]>([]);
+  // Detector boxes for the latest frame, shown instantly while the vision model names them (~1.5 s later).
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [background, setBackground] = useState<Detection[]>([]);
+  const [aspect, setAspect] = useState(16 / 9);
   const [editZone, setEditZone] = useState<string | null>(null);
   const [draft, setDraft] = useState<BBox | null>(null);
 
@@ -47,12 +54,12 @@ export function LiveCamera({
     onStatus(status);
   }, [status, onStatus]);
 
-  // ---- device discovery: prefer the iPhone (Continuity Camera) when present ----
+  // ---- device discovery: default to the built-in camera; an iPhone (Continuity Camera) is one pick away ----
   const refreshDevices = useCallback(async () => {
     const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
     setDevices(all);
     if (!all.length) update({ state: "none" });
-    setDeviceId((cur) => cur && all.some((d) => d.deviceId === cur) ? cur : (all.find((d) => /iphone/i.test(d.label)) ?? all[0])?.deviceId ?? "");
+    setDeviceId((cur) => cur && all.some((d) => d.deviceId === cur) ? cur : (all.find((d) => !/iphone|desk view/i.test(d.label)) ?? all[0])?.deviceId ?? "");
   }, [update, setDeviceId]);
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export function LiveCamera({
         stream = s;
         const track = s.getVideoTracks()[0];
         const st = track.getSettings();
-        track.onended = () => update({ state: "none", visionError: "Camera disconnected. Reconnect the iPhone or pick another camera." });
+        track.onended = () => update({ state: "none", visionError: "Camera disconnected. Pick another camera." });
         if (videoRef.current) videoRef.current.srcObject = s;
         update({ state: "live", label: track.label, resolution: `${st.height ?? "?"}p`, cameraFps: Math.round(st.frameRate ?? 30), visionError: undefined });
       })
@@ -91,20 +98,35 @@ export function LiveCamera({
     };
   }, [deviceId, update]);
 
-  // ---- sampler: cheap thumbnail diff every 250ms; send a compressed frame only when it matters ----
+  // ---- sampler: cheap thumbnail diff every 250ms; only changed frames go to the detector and vision model ----
   useEffect(() => {
     if (status.state !== "live" || !analyzing) return;
     const thumb = Object.assign(document.createElement("canvas"), { width: SAMPLING.thumbW, height: SAMPLING.thumbH });
     const tctx = thumb.getContext("2d", { willReadFrequently: true })!;
-    const full = document.createElement("canvas");
+    const detector = createDetector();
+    let useDetector = true;
+    detector.ready
+      .then((d) => update({ detector: `EfficientDet · ${d}` }))
+      .catch((e: Error) => {
+        useDetector = false;
+        update({ detector: `off (${e.message.slice(0, 60)})` });
+      });
     let lastThumb = new Uint8ClampedArray();
     let lastSent = 0;
     let inFlight = false;
     const sentAt: number[] = [];
 
+    // Fallback when the detector can't run: plain downscaled JPEG, no numbered boxes.
+    const plainJpeg = (v: HTMLVideoElement) => {
+      const scale = Math.min(1, SAMPLING.maxDim / Math.max(v.videoWidth, v.videoHeight));
+      const c = Object.assign(document.createElement("canvas"), { width: Math.round(v.videoWidth * scale), height: Math.round(v.videoHeight * scale) });
+      c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
+      return c.toDataURL("image/jpeg", SAMPLING.jpegQuality);
+    };
+
     const id = setInterval(async () => {
       const v = videoRef.current;
-      if (!v || v.readyState < 2 || document.hidden) return;
+      if (!v || v.readyState < 2 || !v.videoWidth || document.hidden) return;
       tctx.drawImage(v, 0, 0, thumb.width, thumb.height);
       const px = tctx.getImageData(0, 0, thumb.width, thumb.height).data;
       const now = performance.now();
@@ -113,19 +135,31 @@ export function LiveCamera({
       inFlight = true;
       lastSent = now;
       lastThumb = px;
-      const scale = Math.min(1, SAMPLING.maxDim / Math.max(v.videoWidth, v.videoHeight));
-      full.width = Math.round(v.videoWidth * scale);
-      full.height = Math.round(v.videoHeight * scale);
-      const fctx = full.getContext("2d")!;
-      fctx.drawImage(v, 0, 0, full.width, full.height);
-      drawZones(fctx, zones, full.width, full.height); // the model reads the zone labels off the frame
-      const image = full.toDataURL("image/jpeg", SAMPLING.jpegQuality);
-
       try {
-        const r = await api<{ tracked: TrackedDetection[]; latency_ms: number; mode: string; model: string }>("/api/vision", {
-          method: "POST", body: JSON.stringify({ image }),
+        let image: string;
+        let found: Proposal[] = [];
+        if (useDetector) {
+          try {
+            const r = await detector.detect(await createImageBitmap(v), SAMPLING.maxDim, SAMPLING.jpegQuality);
+            found = r.proposals;
+            setProposals(found);
+            setTracked([]);
+            setBackground([]);
+            image = await blobToDataUrl(r.jpeg);
+            update({ detector: `EfficientDet · ${Math.round(r.ms)}ms` });
+          } catch {
+            useDetector = false;
+            image = plainJpeg(v);
+          }
+        } else {
+          image = plainJpeg(v);
+        }
+        const r = await api<{ tracked: TrackedDetection[]; background: Detection[]; latency_ms: number; mode: string; model: string }>("/api/vision", {
+          method: "POST", body: JSON.stringify({ image, proposals: found }),
         });
         setTracked(r.tracked);
+        setBackground(r.background ?? []);
+        setProposals([]);
         sentAt.push(Date.now());
         while (sentAt[0] < Date.now() - 10_000) sentAt.shift();
         update({ visionLatency: r.latency_ms, visionMode: `${r.mode} · ${r.model}`, analysisFps: +(sentAt.length / 10).toFixed(1), visionError: undefined });
@@ -135,8 +169,11 @@ export function LiveCamera({
         inFlight = false;
       }
     }, SAMPLING.tickMs);
-    return () => clearInterval(id);
-  }, [status.state, analyzing, zones, update]);
+    return () => {
+      clearInterval(id);
+      detector.close();
+    };
+  }, [status.state, analyzing, update]);
 
   // ---- zone editor: drag a rectangle over the video for the selected zone ----
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -189,15 +226,19 @@ export function LiveCamera({
           {zones.map((z) => (
             <Button key={z.id} size="sm" variant={z.id === editZone ? "default" : "secondary"} onClick={() => setEditZone(z.id)}>{z.name}</Button>
           ))}
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onZonesChange(DEFAULT_ZONES)}>Reset zones</Button>
         </div>
       )}
 
+      {/* Sized to the stream's own aspect ratio so boxes (normalized to the full frame) line up exactly. */}
       <div
-        className="relative aspect-video w-full overflow-hidden rounded-xl bg-neutral-900 select-none"
+        className="relative mx-auto overflow-hidden rounded-xl bg-neutral-900 select-none"
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-        style={{ cursor: editZone ? "crosshair" : undefined, touchAction: editZone ? "none" : undefined }}
+        style={{ aspectRatio: aspect, width: `min(100%, calc(62dvh * ${aspect}))`, cursor: editZone ? "crosshair" : undefined, touchAction: editZone ? "none" : undefined }}
       >
-        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full object-cover" aria-label="Live camera feed" />
+        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full" aria-label="Live camera feed"
+          onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight); }}
+          onResize={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setAspect(v.videoWidth / v.videoHeight); }} />
 
         {/* zones */}
         {zones.map((z) => (
@@ -208,13 +249,29 @@ export function LiveCamera({
         ))}
         {draft && <div style={boxStyle(draft)} className="absolute border-2 border-amber-300 bg-amber-300/20" />}
 
-        {/* detections */}
+        {/* background contents: shown faintly, never remembered */}
+        {background.map((d, i) => (
+          <div key={`b${i}`} style={boxStyle(d.bbox)} className="absolute rounded border border-white/40">
+            <span className="absolute left-0 top-0 rounded-br bg-black/45 px-1 text-[10px] text-white/80">{d.label}</span>
+          </div>
+        ))}
+
+        {/* detector boxes, shown instantly while the vision model names them */}
+        {proposals.map((p) => (
+          <div key={`p${p.mark}`} style={boxStyle(p.bbox)} className="absolute rounded-md border-2 border-sky-300/90">
+            <span className={`absolute left-0 whitespace-nowrap rounded bg-sky-600/90 px-1.5 py-0.5 text-xs font-medium text-white ${p.bbox.y < 0.08 ? "top-full mt-1" : "-top-1 -translate-y-full"}`}>
+              {p.label} · identifying…
+            </span>
+          </div>
+        ))}
+
+        {/* named detections (solid = precise detector box, dashed = approximate box from the vision model) */}
         {tracked.map((d, i) => {
           const damaged = d.state === "damaged";
           const zoneName = zones.find((z) => z.id === d.zone)?.name ?? "Unmapped area";
           return (
             <div key={`${d.object_id}-${i}`} style={boxStyle(d.bbox)}
-              className={`absolute rounded-md border-[3px] transition-all duration-300 ${damaged ? "border-red-500" : "border-emerald-400"}`}>
+              className={`absolute rounded-md border-[3px] transition-all duration-300 ${d.box_source === "vision" ? "border-dashed" : ""} ${damaged ? "border-red-500" : "border-emerald-400"}`}>
               <div className={`absolute whitespace-nowrap ${d.bbox.x + d.bbox.width > 0.6 ? "right-0" : "left-0"} ${d.bbox.y < 0.14 ? "top-full mt-1" : "-top-1 -translate-y-full"} rounded-md px-2 py-1 text-xs font-semibold leading-tight text-white shadow ${damaged ? "bg-red-600" : "bg-emerald-600"}`}>
                 <div className="text-sm">{d.label}</div>
                 <div className="font-normal opacity-95">{Math.round(d.confidence * 100)}% · {zoneName} · {d.state.toUpperCase()}</div>
@@ -230,6 +287,7 @@ export function LiveCamera({
               <Badge className="bg-red-600 text-white"><span className="mr-1 inline-block size-2 animate-pulse rounded-full bg-white" />LIVE</Badge>
               <Badge variant="secondary">{status.resolution} · ~{status.cameraFps} FPS camera</Badge>
               <Badge variant="secondary">{analyzing ? `${status.analysisFps} FPS AI${status.visionLatency ? ` · ${status.visionLatency}ms` : ""}` : "AI paused"}</Badge>
+              {analyzing && status.detector && <Badge variant="secondary">{status.detector}</Badge>}
             </>
           ) : (
             <Badge variant="secondary">{STATE_TEXT[status.state]}</Badge>
@@ -237,8 +295,8 @@ export function LiveCamera({
         </div>
       </div>
       {status.visionError && <p role="alert" className="text-sm text-destructive">{status.visionError}</p>}
-      {status.state === "live" && !/iphone/i.test(status.label ?? "") && (
-        <p className="text-sm text-muted-foreground">Using the built-in camera works end to end. Optional: an iPhone near the Mac (Continuity Camera) appears in the list for a wider, movable view.</p>
+      {status.state === "live" && (
+        <p className="text-sm text-muted-foreground">Solid boxes are precise (on-device detector); dashed boxes are approximate (named by the vision model only).</p>
       )}
     </section>
   );
@@ -249,21 +307,3 @@ const STATE_TEXT: Record<CameraStatus["state"], string> = {
   denied: "Camera permission denied: allow it in the browser's site settings",
   none: "No camera available", error: "Camera error",
 };
-
-function drawZones(ctx: CanvasRenderingContext2D, zones: Zone[], w: number, h: number) {
-  ctx.save();
-  ctx.lineWidth = 2;
-  ctx.font = `bold ${Math.round(h / 28)}px sans-serif`;
-  for (const z of zones) {
-    const [x, y, zw, zh] = [z.rect.x * w, z.rect.y * h, z.rect.width * w, z.rect.height * h];
-    ctx.strokeStyle = "rgba(255,210,0,0.9)";
-    ctx.setLineDash([8, 6]);
-    ctx.strokeRect(x, y, zw, zh);
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    const label = z.id;
-    ctx.fillRect(x + 2, y + 2, ctx.measureText(label).width + 10, h / 22);
-    ctx.fillStyle = "#ffd200";
-    ctx.fillText(label, x + 7, y + h / 28);
-  }
-  ctx.restore();
-}

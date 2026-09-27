@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Scratch test data and vendored MediaPipe runtime (copied by scripts/setup-models.sh).
+    ".e2e/**",
+    "public/mediapipe/**",
   ]),
 ]);
 
