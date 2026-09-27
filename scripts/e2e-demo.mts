@@ -54,7 +54,7 @@ try {
   await accept.waitFor();
   if (!(await accept.isDisabled())) throw new Error("Accept must be disabled before consent");
   await shot(page, "01-consent");
-  for (const cb of await page.getByRole("checkbox").all()) await cb.click();
+  for (const cb of await page.getByRole("checkbox").all()) await cb.check();
   await accept.click();
   await page.getByRole("heading", { name: "RecallLens" }).waitFor();
   log("consent accepted");
