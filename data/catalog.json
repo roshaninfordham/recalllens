@@ -1,0 +1,8 @@
+[
+  { "id": "charger-usbc-20w", "name": "20W USB-C Fast Charger", "connector": "USB-C", "wattage": 20, "compatible": ["demo-phone", "iphone-15", "iphone-16", "iphone-17", "pixel-9", "galaxy-s25"], "price": 19.99, "description": "Compact USB-C PD wall charger with 1 m braided USB-C cable." },
+  { "id": "charger-usbc-45w-gan", "name": "45W GaN USB-C Charger", "connector": "USB-C", "wattage": 45, "compatible": ["demo-phone", "iphone-15", "iphone-16", "iphone-17", "pixel-9", "galaxy-s25", "laptop-usbc"], "price": 34.99, "description": "Dual-port GaN charger, fast-charges phone and tablet." },
+  { "id": "charger-lightning-12w", "name": "12W Lightning Charger", "connector": "Lightning", "wattage": 12, "compatible": ["iphone-13", "iphone-14"], "price": 14.99, "description": "USB-A wall adapter with Lightning cable for older iPhones." },
+  { "id": "charger-microusb-10w", "name": "10W Micro-USB Charger", "connector": "Micro-USB", "wattage": 10, "compatible": ["legacy-android"], "price": 9.99, "description": "Basic micro-USB charger for older Android devices." },
+  { "id": "cable-usbc-2m", "name": "USB-C to USB-C Cable (2 m)", "connector": "USB-C", "wattage": 60, "compatible": ["demo-phone", "iphone-15", "iphone-16", "iphone-17", "pixel-9", "galaxy-s25"], "price": 12.99, "description": "Replacement cable only — no wall adapter." },
+  { "id": "charger-magsafe-15w", "name": "15W MagSafe Wireless Charger", "connector": "MagSafe", "wattage": 15, "compatible": ["iphone-15", "iphone-16", "iphone-17"], "price": 39.99, "description": "Magnetic wireless charging puck; requires USB-C adapter." }
+]
