@@ -15,8 +15,8 @@ export interface Detection {
   state: ObjectState;
   state_confidence: number;
   damage_description?: string;
-  /** Zone the model itself picked; used only when the bbox centre falls outside every drawn zone. */
-  zone_hint?: string;
+  /** "detector": precise box from the in-browser detector; "vision": approximate box from the vision model. */
+  box_source?: "detector" | "vision";
 }
 
 /** A detection after tracking: stable id + zone assigned from the bbox. */
@@ -61,4 +61,12 @@ export interface Product {
   compatible: string[];
   price: number;
   description: string;
+}
+
+/** A box from the in-browser detector, drawn and numbered on the frame sent to the vision model. */
+export interface Proposal {
+  mark: number;
+  label: string; // detector's generic class, e.g. "cell phone"
+  score: number;
+  bbox: BBox;
 }
