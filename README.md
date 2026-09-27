@@ -21,17 +21,20 @@ Captured automatically by the end-to-end run (`npm run e2e`). Real app, real vis
 | ![Recall answer](docs/screenshots/03-recall-answer.png) | ![Damage detected](docs/screenshots/04-damage-detected.png) |
 | **5. Act** Hinglish request → phone compatibility → product search → add to cart. Not purchased. | **6. Proof** Developer panel: every hop in the live event log, plus the labelled demo failsafe. |
 | ![Replacement in cart](docs/screenshots/05-replacement-in-cart.png) | ![Developer panel](docs/screenshots/06-developer-panel.png) |
-| **7. Calibrate** Drag to place each named zone over the camera view. | |
-| ![Zone editor](docs/screenshots/07-zone-editor.png) | |
+| **7. Calibrate** Drag to place each named zone over the camera view. | **8. Phone camera** Pick "Phone camera": a QR code opens a single-use link (`npm run e2e:phone`). |
+| ![Zone editor](docs/screenshots/07-zone-editor.png) | ![Phone QR](docs/screenshots/08-phone-qr.png) |
+| **9. On the phone** Tap Start; frames stream to the laptop over HTTPS, on any network. | **10. Phone feed live** Same detection and memory pipeline; faint boxes are background, not remembered. |
+| ![Phone page](docs/screenshots/09-phone-page.png) | ![Phone feed live](docs/screenshots/10-phone-live.png) |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[Laptop camera or iPhone] --> B[Browser Live Video]
+    A[Laptop camera, iPhone,<br/>or phone via QR] --> B[Browser Live Video]
     B --> C[Frame Sampler<br/>thumbnail diff, 0.5–2 FPS]
-    C --> D[Vision Adapter<br/>OpenAI-compatible]
-    D --> E[Observation Aggregator<br/>track · hysteresis · dedup]
+    C --> D1[On-device detector<br/>EfficientDet, Web Worker]
+    D1 -->|numbered boxes| D[Vision model<br/>names, damage, missed items]
+    D --> E[Observation Aggregator<br/>personal items · track · dedup]
     E --> F[Spatial Memory Events]
     F --> G[(Cognee<br/>personal_spatial_memory)]
     H[User Voice/Text<br/>any language] --> I[Memory Concierge]
@@ -46,13 +49,27 @@ flowchart LR
 
 | Layer | What it does | Where |
 |---|---|---|
-| **See** | Camera at native FPS; only changed frames (768 px JPEG, q0.6) go to vision, ~1.2–1.6 s each with `gpt-4.1` | `components/LiveCamera.tsx`, `lib/sampling.ts`, `lib/vision.ts` |
+| **See** | Camera at native FPS; only changed frames are analyzed. An on-device detector (MediaPipe EfficientDet-Lite2, GPU, in a Web Worker, ~70 ms) draws precise boxes at once; `gpt-4.1` then names each numbered box, judges damage and adds objects the detector can't box (~1.5 s) | `components/LiveCamera.tsx`, `public/detector-worker.js`, `lib/vision.ts` |
 | **Understand** | Per-frame detections → stable object ids, zones, and only `FIRST_SEEN / MOVED / STATE_CHANGED / REAPPEARED / DISAPPEARED` events | `lib/aggregator.ts`, `lib/zones.ts` |
 | **Remember** | Durable events written to Cognee (session → permanent), recalled as exact chunks and sorted by timestamp | `lib/cognee.ts`, `lib/pipeline.ts` |
 | **Act** | Memory Concierge agent with tools: recall, current view, profile, product search, add to cart | `lib/agent.ts`, `lib/tools.ts`, `clawmax/` |
 
 ### Why Cognee
 Cognee is the durable, queryable memory layer: `remember` with a `session_id` returns in ~2–3 s and Cognee merges it into the permanent graph (~20 s) with a `data_id`, so observations can later be recalled **and forgotten** individually. We recall with `search_type: CHUNKS` (~4–9 s), which returns the exact stored text. Completion-style search paraphrases and drops timestamps, and "newest trustworthy observation" needs timestamps.
+
+### Vision accuracy, measured
+`npm run eval:vision` and `npm run eval:detector` score the pipeline on everyday objects from COCO (Ultralytics coco128, 20 images, 68 objects with ground-truth boxes):
+
+| Pipeline | Found (IoU ≥ 0.3) | Tight box (IoU ≥ 0.5) | Mean IoU | Latency |
+|---|---|---|---|---|
+| Old prompt (5 item types only) | 0% | 0% | – | 0.8 s |
+| `gpt-4.1` alone, broad prompt | 25–31% | 7% | 0.46 | 1.6–1.9 s |
+| On-device EfficientDet-Lite2 | 72% | 65% | 0.79 | 0.07 s (Mac GPU) |
+| **Detector + `gpt-4.1` naming (shipped)** | 66–68% | 60–62% | 0.80 | 1.6 s (boxes appear at 0.07 s) |
+
+The detector knows 80 COCO classes (phone, cup, bottle, book, remote, scissors, laptop, keyboard, mouse, bag, …) and gives those tight boxes. It has **no class for chargers, keys, wallets or glasses**: those are still recognised and named by the vision model, with an approximate box (drawn dashed in the UI). General chat models are poor at box coordinates, which is why the detector does the boxing.
+
+Only **personal items** become memory; the room's background contents (books on a shelf, decor) are drawn faintly and never stored.
 
 ### Why raw video never goes to Cognee
 Cognee is a memory, not a frame store. 30 FPS of pixels would be slow, expensive and noisy, and a privacy liability. Frames stay ephemeral in the browser/server request; only structured, redacted observations are stored. Twenty sightings of a charger on the same table produce **one** memory, not twenty (`tests/aggregator.test.ts`).
@@ -93,10 +110,12 @@ Health: `GET /api/health` → `{ cognee, clawmax, agent, vision, commerce, detai
 ### Camera
 The **built-in laptop camera works end to end**: open RecallLens, accept consent, allow camera, done. The picker lists every camera.
 
-Optional, for a wider or movable view: an **iPhone as Continuity Camera** (same Apple ID on iPhone and Mac, Wi-Fi + Bluetooth on, macOS 13+/iOS 16+). Put it near the Mac, locked, in landscape; the picker prefers it automatically when present. If it disconnects, the UI says so and you can switch back to the built-in camera.
+Optional: **any phone by QR code.** Pick **📱 Phone camera** in the camera list. RecallLens opens a temporary HTTPS link through a Cloudflare quick tunnel (needs `brew install cloudflared`; the QR appears after ~20 s, once the link resolves), you scan it, tap **Start**, and the phone streams ~8 frames/s to the laptop. Works on any network, including cellular. The link carries a random single-use token; only the phone page and a frame upload are reachable through it (the app, its APIs and your keys are not); frames are kept in memory only; the tunnel closes on **Disconnect** or after 10 idle minutes.
+
+Optional: an **iPhone as Continuity Camera** (same Apple ID, Wi-Fi + Bluetooth on) also appears in the camera list on a Mac.
 
 ### Calibrate zones
-Default zones are four quadrants (Desk, Couch, Hall / Front Table, Hall / Back Table). Click **Edit zones**, choose a zone, drag a rectangle over the part of the view it represents. Zones are drawn onto the frames sent to vision, so the model and the zone map agree.
+Default zones are four quadrants (Desk, Couch, Hall / Front Table, Hall / Back Table). Click **Edit zones**, choose a zone, drag a rectangle over the part of the view it represents; **Reset zones** restores the quadrants. An object's zone is the zone containing its box centre.
 
 ### Connect ClawMax
 Works with a **ClawMax running on this Mac** (open-source ClawMax, `./SYSTEM/start.sh`, API on `:3001`):
@@ -122,6 +141,8 @@ Works with a **ClawMax running on this Mac** (open-source ClawMax, `./SYSTEM/sta
 - The consent receipt (`consent_id`, `participant_id`, `event_id`, `policy_version`, exact `choices`, `consented_at`) is one immutable SQLite row; a trigger rejects updates.
 - Frames are never stored. Observation text is redacted for keys, tokens, passwords, card numbers, SSNs, emails and phone numbers before it reaches Cognee (`lib/redact.ts`).
 - API keys live only in server env; the browser never sees them. Tool endpoints accept loopback only and reject foreign `Host` headers.
+- The object detector runs on the device; its model and runtime are served locally (`scripts/setup-models.sh`), not from a CDN.
+- Phone pairing exposes only a separate phone listener (page + frame upload) behind a random token, never the Next.js app.
 - Nothing is ever purchased; `add_to_cart` is the most the agent can do.
 - **Forget all memory** (developer panel) deletes the Cognee dataset and the local mirror.
 
@@ -131,6 +152,9 @@ Works with a **ClawMax running on this Mac** (open-source ClawMax, `./SYSTEM/sta
 npm test               # unit: consent, redaction, sampling/dedup, aggregation, movement, state change, Cognee parsing, confidence, search, cart
 npm run smoke:cognee   # live: remember → recall → forget against your Cognee tenant
 npm run e2e            # live end-to-end through the UI with a synthetic camera; refreshes docs/screenshots (needs npm run dev)
+npm run e2e:phone      # phone pairing through a real Cloudflare tunnel with an emulated phone (needs cloudflared)
+npm run eval:vision    # vision model alone on COCO ground truth (recall, IoU, naming, latency)
+npm run eval:detector  # on-device detector (+ PIPELINE=1 for detector + vision naming); HEADED=1 for real GPU timings
 npm run lint && npm run typecheck && npm run build
 ```
 
@@ -140,12 +164,13 @@ CI runs lint, typecheck, tests and build on every push (`.github/workflows/ci.ym
 - **Recall lag:** a new observation is recallable via `CHUNKS` after Cognee's merge, typically 10–30 s.
 - **Location precision:** zone-level ("near the back table"), from the bbox centre. No metric positioning.
 - **Identity:** same-class objects are told apart by position (greedy nearest match); two identical chargers swapping places will swap ids.
-- **Vision:** a cloud model call per changed frame (~1.2–1.6 s). Damage must be visible to the camera.
+- **Vision:** precise boxes only for the detector's 80 COCO classes; chargers, keys, wallets and glasses get approximate boxes from the vision model, and it sometimes misnames packaging (a boxed charger was once called a "card reader box"). Names arrive ~1.5 s after the boxes. Damage must be visible to the camera.
+- **Phone link:** a Cloudflare quick tunnel is a public HTTPS URL (token-gated) and takes ~20 s to become resolvable.
 - **Single process:** tracker and event bus live in memory; one demo server, one active session.
-- **ClawMax hosted workspace:** until the workspace invite arrives, the agent runs in local-runtime mode with the same instructions and tools.
+- **ClawMax hosted instance:** connecting it needs a credential in `.env.local` (see *Connect ClawMax*); until then the agent runs in local-runtime mode with the same instructions and tools.
 
 ## Roadmap
-- **Rust on-device vision:** a local detector (YOLO via `ort`/`candle`, or WASM in the browser) would cut vision from ~1.5 s to ~30 ms per frame, run offline and keep frames on the device. This is the one place Rust clearly pays off; everything else here is network-bound.
+- **Open-vocabulary on-device detection** (e.g. OWLv2 or YOLO-World, possibly via Rust/`ort` or WebGPU) so chargers, keys and wallets get precise boxes too, and naming needs no cloud call.
 - Smart-glasses capture, calibrated room maps, per-object "remind me when I leave without it".
 
 ## Troubleshooting
